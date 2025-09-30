@@ -1,4 +1,4 @@
-# NetSupport Monitor v3.0
+# NetSupport Monitor v0.4.1beta
 
 NetSupport Monitor is a **simple, lightweight tool** for monitoring **NetSupport School** connections on your computer.
 **Perfect for students** - just check the tray icon to see if a teacher is connected!
