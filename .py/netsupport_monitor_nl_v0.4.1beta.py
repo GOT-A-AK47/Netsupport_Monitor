@@ -265,8 +265,23 @@ if __name__ == "__main__":
         # Write Python script
         script_path = "netsupport_details.py"
         try:
-            with open(script_path, 'w', encoding='utf-8') as f:
+            # Validate and sanitize paths to prevent command injection
+            script_path_abs = os.path.abspath(script_path)
+            if not script_path_abs.endswith('.py'):
+                raise ValueError("Invalid script path")
+
+            with open(script_path_abs, 'w', encoding='utf-8') as f:
                 f.write(script_content)
+
+            # Use safe path for batch script
+            batch_path = "netsupport_launcher.bat"
+            batch_path_abs = os.path.abspath(batch_path)
+
+            if not batch_path_abs.endswith('.bat'):
+                raise ValueError("Invalid batch path")
+
+            # Escape path for batch file to prevent injection
+            script_path_escaped = script_path_abs.replace('"', '""')
 
             # For PyInstaller compatibility, create a batch launcher
             batch_script = f'''@echo off
@@ -274,7 +289,7 @@ title NetSupport Monitor - Details
 color 0A
 mode con: cols=58 lines=16
 
-python "{script_path}"
+python "{script_path_escaped}"
 if errorlevel 1 (
     echo.
     echo Python niet gevonden! Installeer Python eerst.
@@ -283,11 +298,11 @@ if errorlevel 1 (
 )
 '''
 
-            batch_path = "netsupport_launcher.bat"
-            with open(batch_path, 'w', encoding='ascii', errors='replace') as f:
+            with open(batch_path_abs, 'w', encoding='ascii', errors='replace') as f:
                 f.write(batch_script)
 
-            self.cmd_window = subprocess.Popen([batch_path],
+            # Use shell=False explicitly for security
+            self.cmd_window = subprocess.Popen([batch_path_abs], shell=False,
                                              creationflags=subprocess.CREATE_NEW_CONSOLE)
         except Exception as e:
             # Only print once, avoid duplicate error messages
@@ -438,41 +453,74 @@ if __name__ == "__main__":
 
         script_path = "netsupport_settings.py"
         try:
-            with open(script_path, 'w', encoding='utf-8') as f:
+            # Validate and sanitize paths to prevent command injection
+            script_path_abs = os.path.abspath(script_path)
+            if not script_path_abs.endswith('.py'):
+                raise ValueError("Invalid script path")
+
+            with open(script_path_abs, 'w', encoding='utf-8') as f:
                 f.write(script_content)
+
+            # Use safe path for batch script
+            batch_path = "netsupport_settings_launcher.bat"
+            batch_path_abs = os.path.abspath(batch_path)
+
+            if not batch_path_abs.endswith('.bat'):
+                raise ValueError("Invalid batch path")
+
+            # Escape path for batch file to prevent injection
+            script_path_escaped = script_path_abs.replace('"', '""')
 
             batch_script = f'''@echo off
 title NetSupport Monitor - Instellingen
 color 0A
 mode con: cols=58 lines=14
 
-python "{script_path}"
+python "{script_path_escaped}"
 '''
 
-            batch_path = "netsupport_settings_launcher.bat"
-            with open(batch_path, 'w', encoding='ascii', errors='replace') as f:
+            with open(batch_path_abs, 'w', encoding='ascii', errors='replace') as f:
                 f.write(batch_script)
 
-            self.cmd_window = subprocess.Popen([batch_path],
+            # Use shell=False explicitly for security
+            self.cmd_window = subprocess.Popen([batch_path_abs], shell=False,
                                              creationflags=subprocess.CREATE_NEW_CONSOLE)
         except Exception as e:
             print(f"Kon instellingen venster niet openen: {e}")
 
     def show_statistics_window(self, stats):
         """Show statistics in CMD window (Dutch)"""
-        # Format statistics
-        total = stats.get('total_connections', 0)
-        today = stats.get('connections_today', 0)
-        duration = stats.get('total_connection_duration', 0) / 60
+        # Format statistics with validation and sanitization
+        total = int(stats.get('total_connections', 0))
+        today = int(stats.get('connections_today', 0))
+        duration = float(stats.get('total_connection_duration', 0)) / 60
         last_conn = stats.get('last_connection_time')
         history_count = len(stats.get('connection_history', []))
 
+        # Validate and format timestamp safely
         if last_conn:
-            last_conn_str = datetime.fromtimestamp(last_conn).strftime('%Y-%m-%d %H:%M:%S')
+            try:
+                # Validate timestamp is within reasonable range (year 1970-2100)
+                if 0 <= last_conn <= 4102444800:  # Jan 1, 2100
+                    last_conn_str = datetime.fromtimestamp(last_conn).strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    last_conn_str = 'Ongeldige timestamp'
+            except (ValueError, OSError, OverflowError):
+                last_conn_str = 'Ongeldige timestamp'
         else:
             last_conn_str = 'Nooit'
 
-        # Create statistics display script (Dutch)
+        # Sanitize string to prevent injection (escape quotes and backslashes)
+        def sanitize(s):
+            return str(s).replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'")
+
+        total_safe = sanitize(total)
+        today_safe = sanitize(today)
+        duration_safe = sanitize(f"{duration:.1f}")
+        last_conn_safe = sanitize(last_conn_str)
+        history_safe = sanitize(history_count)
+
+        # Create statistics display script (Dutch) with safe string interpolation
         script_content = f'''
 import os
 import sys
@@ -481,18 +529,24 @@ def show_stats():
     os.system("cls")
     os.system("mode con: cols=58 lines=18")
 
+    total = "{total_safe}"
+    today = "{today_safe}"
+    duration_str = "{duration_safe}"
+    last_conn = "{last_conn_safe}"
+    history = "{history_safe}"
+
     print("+======================================================+")
     print("|            VERBINDINGSSTATISTIEKEN                 |")
     print("+======================================================+")
     print("|                                                    |")
-    print(f"| Totaal verbindingen:   {total:<27} |")
-    print(f"| Verbindingen vandaag:  {today:<27} |")
-    print(f"| Totale duur:           {duration:.1f} minuten{' '*(27-len(str(int(duration)))-9)} |")
+    print(f"| Totaal verbindingen:   {{total:<27}} |")
+    print(f"| Verbindingen vandaag:  {{today:<27}} |")
+    print(f"| Totale duur:           {{duration_str}} minuten{{' '*(27-len(duration_str)-8)}} |")
     print("|                                                    |")
     print(f"| Laatste verbinding:                                |")
-    print(f"|   {last_conn_str:<50} |")
+    print(f"|   {{last_conn:<50}} |")
     print("|                                                    |")
-    print(f"| Recente geschiedenis:  {history_count} items{' '*(27-len(str(history_count))-6)} |")
+    print(f"| Recente geschiedenis:  {{history}} items{{' '*(27-len(history)-6)}} |")
     print("|                                                    |")
     print("+======================================================+")
     print("|                                                    |")
@@ -513,22 +567,37 @@ if __name__ == "__main__":
 
         script_path = "netsupport_statistics.py"
         try:
-            with open(script_path, 'w', encoding='utf-8') as f:
+            # Validate and sanitize paths to prevent command injection
+            script_path_abs = os.path.abspath(script_path)
+            if not script_path_abs.endswith('.py'):
+                raise ValueError("Invalid script path")
+
+            with open(script_path_abs, 'w', encoding='utf-8') as f:
                 f.write(script_content)
+
+            # Use safe path for batch script
+            batch_path = "netsupport_statistics_launcher.bat"
+            batch_path_abs = os.path.abspath(batch_path)
+
+            if not batch_path_abs.endswith('.bat'):
+                raise ValueError("Invalid batch path")
+
+            # Escape path for batch file to prevent injection
+            script_path_escaped = script_path_abs.replace('"', '""')
 
             batch_script = f'''@echo off
 title NetSupport Monitor - Statistieken
 color 0A
 mode con: cols=58 lines=18
 
-python "{script_path}"
+python "{script_path_escaped}"
 '''
 
-            batch_path = "netsupport_statistics_launcher.bat"
-            with open(batch_path, 'w', encoding='ascii', errors='replace') as f:
+            with open(batch_path_abs, 'w', encoding='ascii', errors='replace') as f:
                 f.write(batch_script)
 
-            subprocess.Popen([batch_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
+            # Use shell=False explicitly for security
+            subprocess.Popen([batch_path_abs], shell=False, creationflags=subprocess.CREATE_NEW_CONSOLE)
         except Exception as e:
             print(f"Kon statistieken venster niet openen: {e}")
 
